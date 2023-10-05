@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />  
+  <link rel="stylesheet" href="style.css" type="text/css" media="screen" />
+  <title>Morse Keyer</title>
+</head>
+
+<body>
+  <h1>Simple Morse Keyer</h1>
+  <h2>Output</h2>
+  <p>
+    <div id="out"></div>
+  </p>
+  <h2>Settings</h2>
+  <p>
+    <label for="vol"> Volume </label>
+    <input id="vol" type="range" min="0" max="100" step="1" value="100">
+  </p>
+  <p>
+    <label for="wpm"> WPM </label>
+    <input id="wpm" type="range" min="5" max="40" step="1" value="20">
+  </p><span class="value" id="wpm_value"></span>
+  <p>
+    <label for="freq"> Frequency </label>
+    <input id="freq" type="range" min="500" max="900" step="10" value="650"> </input> 
+  </p><span class="value" id="freq_value"></span><span class="value">Hz</span>
+  <script src="morse.js"></script>
+</body>
+
+</html>
