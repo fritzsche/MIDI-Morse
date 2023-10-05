@@ -560,8 +560,69 @@ class MorseKeyer {
     }
 }
 
+// MIDI functions
+
+let morseKeyer;
+
+function connectMIDI() {
+    navigator.requestMIDIAccess()
+        .then(
+            (midi) => midiReady(midi),
+            (err) => console.log('Something went wrong', err));
+}
+
+function midiReady(midi) {
+    midi.addEventListener('statechange', (event) => initDevices(event.target));
+    initDevices(midi);
+}
+
+function initDevices(midi) {
+    midiIn = [];
+    midiOut = [];
+    
+    // Inputs
+    const inputs = midi.inputs.values();
+    for (let input = inputs.next(); input && !input.done; input = inputs.next()) {
+      midiIn.push(input.value);
+    }
+    
+    // Outputs
+    const outputs = midi.outputs.values();
+    for (let output = outputs.next(); output && !output.done; output = outputs.next()) {
+      midiOut.push(output.value);
+    }
+    startListening();
+  }
+
+  function startListening() {
+    for (const input of midiIn) {
+      input.addEventListener('midimessage', midiMessageReceived);
+    }
+  }
+
+  function midiMessageReceived(event) {
+    // http://webaudio.github.io/web-midi-api/#a-simple-monophonic-sine-wave-midi-synthesizer.
+    const NOTE_ON = 9;
+    const NOTE_OFF = 8;
+    
+    const PITCH_DIT = 48;
+    const PITCH_DAH = 50;
+  
+    const cmd = event.data[0] >> 4;
+    const pitch = event.data[1];
+//    console.log(`CMD ${cmd} pitch ${pitch }`);
+    if (cmd === NOTE_ON) {
+        if (pitch == PITCH_DIT) morseKeyer.keydown(DIT); else morseKeyer.keydown(DAH)
+    } else {
+        if (pitch == PITCH_DIT) morseKeyer.keyup(DIT); else morseKeyer.keyup(DAH)
+    }    
+  }
+
+
 // focus text box on load
 window.onload = function () {
+    connectMIDI();
+
     // https://stackoverflow.com/questions/7944460/detect-safari-browser    
     var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
     // store settings in local storage
@@ -590,23 +651,23 @@ window.onload = function () {
         document.getElementById("freq").value = setting.freq
     }
 
-    let vol = parseInt(document.getElementById("vol").value)    
+    let vol = parseInt(document.getElementById("vol").value)
     let wpm = parseInt(document.getElementById("wpm").value)
     let freq = parseInt(document.getElementById("freq").value)
 
 
-    let morseKeyer = new MorseKeyer(vol,wpm, freq)
+    morseKeyer = new MorseKeyer(vol, wpm, freq)
 
     document.getElementById("freq_value").textContent = document.getElementById("freq").value
     document.getElementById("freq").addEventListener("input", (event) => {
         document.getElementById("freq_value").textContent = event.target.value;
-      });
+    });
 
 
-      document.getElementById("wpm_value").textContent = document.getElementById("wpm").value
-      document.getElementById("wpm").addEventListener("input", (event) => {
-          document.getElementById("wpm_value").textContent = event.target.value;
-        });      
+    document.getElementById("wpm_value").textContent = document.getElementById("wpm").value
+    document.getElementById("wpm").addEventListener("input", (event) => {
+        document.getElementById("wpm_value").textContent = event.target.value;
+    });
 
     window.onkeydown = function (e) {
         // Problem in Safari: it return 2nd key down event if both ctrl key pressed instead of keyup
@@ -615,12 +676,12 @@ window.onload = function () {
         keyAllowed[e.code] = false
         console.log("down " + e.code)
         if (e.code === "ShiftLeft" || e.code === "ControlLeft" || e.code === "Period") {
-            if (isSafari && morseKeyer._ditKey === DOWN ) morseKeyer.keyup(DIT); 
+            if (isSafari && morseKeyer._ditKey === DOWN) morseKeyer.keyup(DIT);
             else morseKeyer.keydown(DIT)
         }
         if (e.code === "ShiftRight" || e.code === "ControlRight" || e.code === "Slash") {
-            if (isSafari && morseKeyer._dahKey === DOWN ) morseKeyer.keyup(DAH); 
-            else morseKeyer.keydown(DAH)            
+            if (isSafari && morseKeyer._dahKey === DOWN) morseKeyer.keyup(DAH);
+            else morseKeyer.keydown(DAH)
         }
     }
     window.onkeyup = function (e) {
