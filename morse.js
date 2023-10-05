@@ -788,7 +788,7 @@ class MorseKeyer {
 let morseKeyer;
 
 function connectMIDI() {
-    navigator.requestMIDIAccess()
+    if (navigator.requestMIDIAccess( )) navigator.requestMIDIAccess({ sysex: false })
         .then(
             (midi) => midiReady(midi),
             (err) => console.log('Something went wrong', err));
