@@ -1,3 +1,9 @@
+/* 
+ * Details about squeeze keying as documented by DJ5IL
+ * http://cq-cq.eu/DJ5IL_rt007.pdf
+ */
+
+
 const code_map = [
     [/<ka>/, '-.-.-'], // Message begins / Start of work 
     [/<sk>/, '...-.-'], //  End of contact / End of work
@@ -156,17 +162,13 @@ class Morse {
         this._state = 'STOPPED'
         this._cwGain.gain.cancelScheduledValues(this._ctx.currentTime)
         this._cwGain.gain.value = 0
-        console.log(this._scheduled)
         //       this._currPos -= this._scheduled
         const time = this._ctx.currentTime - this._startTime
-        console.log("time ", time)
         clearTimeout(this._stopTimer)
         // in case we already schedules all entries we need to set 
         // position to last element
         if (this._currPos >= this._seqence.length) this._currPos = this._seqence.length - 1
         for (; ;) {
-
-            console.log(this._currPos, this._seqence[this._currPos].time, time, this._seqence[this._currPos].action)
             const seq = this._seqence[this._currPos]
 
             if ((time >= seq.time && seq.action === 'DISPLAY') || this._currPos == 0) break;
@@ -174,13 +176,11 @@ class Morse {
         }
         for (const timer of this._scheduled) {
             clearTimeout(timer)
-            console.log("Clear" + timer)
         }
     }
     // https://github.com/cwilso/metronome/
     // https://www.html5rocks.com/en/tutorials/audio/scheduling/
     _morsePlay() {
-        console.log("play ", this._currPos, this._seqence.length)
         if (this._currPos >= this._seqence.length) this._currPos = 0
         switch (this._state) {
             case 'INITIAL':
@@ -218,7 +218,6 @@ class Morse {
                             // executing now the first element in the scheduled events.
                             // need to remove it from array
                             this._state = 'INITIAL';
-                            console.log("set initial")
                             this._currPos = 0;
 
                         }, milis);
@@ -255,7 +254,6 @@ class Morse {
                             }, milis);
                             // Schedule gui event 
                             this._scheduled.push(timerId)
-                            console.log("add", timerId)
                             break;
                         }
                     }
@@ -401,31 +399,108 @@ class Morse {
     }
 }
 
-const DIT = 1
-const DAH = 2
-const NONE = 3
+const DIT = '.'
+const DAH = '-'
+const NONE = 'X'
 
 
 const DOWN = 1
 const UP = 2
 
 
-class MorseKeyer {
-    constructor(volume = 100, wpm = 25, freq = 600) {
+const morse_map = {
+    // alpha
+    '.-': 'a',
+    '-...': 'b',
+    '-.-.': 'c',
+    '-..': 'd',
+    '.': 'e',
+    '..-.': 'f',
+    '--.': 'g',
+    '....': 'h',
+    '..': 'i',
+    '.---': 'j',
+    '-.-': 'k',
+    '.-..': 'l',
+    '--': 'm',
+    '-.': 'n',
+    '---': 'o',
+    '.--.': 'p',
+    '--.-': 'q',
+    '.-.': 'r',
+    '...': 's',
+    '-': 't',
+    '..-': 'u',
+    '...-': 'v',
+    '.--': 'w',
+    '-..-': 'x',
+    '-.--': 'y',
+    '--..': 'z',
+    // numbers   
+    '.----': '1',
+    '..---': '2',
+    '...--': '3',
+    '....-': '4',
+    '.....': '5',
+    '-....': '6',
+    '--...': '7',
+    '---..': '8',
+    '----.': '9',
+    '-----': '0',
+    // punctuation   
+    '--..--': ',',
+    '..--..': '?',
+    '.-.-.-': '.',
+    '-...-': '=',
+    // Deutsche Umlaute
+    '.--.-': 'ä',
+    '---.': 'ö',
+    '..--': 'ü',
+    '...--..': 'ß',
+    '-.-.--': '!',
+    '-.-.-': '<ka>', // Message begins / Start of work 
+    '...-.-': '<sk>', //  End of contact / End of work
+    '.-.-.': '<ar>', // End of transmission / End of message
+    '-.--.': '<kn>' // Go ahead, specific named station.    
+}
 
-        //        this._oscillator.start()
+
+class MorseKeyer {
+    constructor(volume = 100, wpm = 25, freq = 600, callback, keyMode) {
         this._started = false
         this._wpm = Number(wpm)
         this._freq = Number(freq)
         this._volume = Number(volume)
         this._ditLen = this._ditLength(this._wpm * 5)
 
+        // set if dit/dah-key's pressed
         this._ditKey = UP
         this._dahKey = UP
-        this._memory = NONE
+
+        // memory a pressed dit key while dah key is pressed
+        this._ditMemory = false
+        // memory a pressed dah key while dit key is pressed
+        this.dahMemory = false
+
+        // set true while both paddels are pressed
         this._iambic = false
+
+        // active while keys are pressed and memory is processed (main loop)
         this._ticking = false
+
+        // the last element executed (e.g. to issue alternating elements on iambic action)
         this._lastElement = NONE
+        // elements of the current letter are stored here
+        this._currentLetter = ""
+        this._displayCallback = displayCallback
+        this._lastTime = 0
+
+        this._lastDitKey = 0
+        this._lastDahKey = 0
+
+        if (key === "CURTIS_A")
+            this, _keyerMode = 'A';
+        else this._keyerMode = 'B'
     }
 
 
@@ -445,120 +520,268 @@ class MorseKeyer {
         return cpmDitSpeed / cpm;
     }
 
-    playDitElement() {
-        console.log("dit")
-        this._lastElement = DIT
-        this._cwGain.gain.setValueAtTime(1, this._ctx.currentTime)
-        this._cwGain.gain.setValueAtTime(0, this._ctx.currentTime + this._ditLen)
+    _displayLetter(l) {
+        if (this._displayCallback) this._displayCallback(l)
     }
 
-    playDahElement() {
-        console.log("dah")
-        this._lastElement = DAH
+    _appendElement(e) {
+        // to detect we need to output a space (intra word distance) 
+        // we check to see at least 6 dits since the last character end. 
+        // Detail are 7 dit length but 6 is for more tolerance        
+        let delta = 0
+        let now = (new Date()).getTime()
+        if (this._lastTime > 0 && this._currentLetter === "") delta = Math.abs(now - this._lastTime)
+        if (delta > 6 * this._ditLen * 1000) this._displayLetter(' ')
+        // append element to build letters
+        this._currentLetter += e
+    }
+
+    playElement(e) {
+        this._appendElement(e)
+        this._lastElement = e
         this._cwGain.gain.setValueAtTime(1, this._ctx.currentTime)
-        this._cwGain.gain.setValueAtTime(0, this._ctx.currentTime + 3 * this._ditLen)
+        if (e === DIT) {
+            this._cwGain.gain.setValueAtTime(0, this._ctx.currentTime + this._ditLen)
+            setTimeout(() => { this.tick() }, 2 * this._ditLen * 1000)
+        } else {
+            this._cwGain.gain.setValueAtTime(0, this._ctx.currentTime + 3 * this._ditLen)
+            setTimeout(() => { this.tick() }, 4 * this._ditLen * 1000)
+        }
+    }
+
+    set volume(vol = 50) {
+        this.start()
+        this._volume = vol
+        let v = Math.pow(this._volume / 100, 3)  ////Math.exp( this._volume )
+        this._totalGain.gain.exponentialRampToValueAtTime(v, this._ctx.currentTime /+ 0.03 ) 
+    }
+
+    set wpm(wpm = 50) {
+        this._wpm = wpm
+        this._ditLen = this._ditLength(this._wpm * 5)
+    }
+
+    set frequency(freq = 650) {
+        this.start()
+        this._freq = freq
+        this._oscillator.frequency.setValueAtTime(this._freq, this._ctx.currentTime)
+        this._lpf.frequency.setValueAtTime(this._freq, this._ctx.currentTime)
+    }
+
+    set keyer(key = 'CURTIS_B') {
+        if (key === 'CURTIS_B') {
+            this._keyerMode = 'B'
+        } else this._keyerMode = 'A'
     }
 
     start() {
         if (this._started === false) {
-
+            this._started = true
             this._ctx = new (window.AudioContext || window.webkitAudioContext)() // web audio context
 
+
+            this._analyser = this._ctx.createAnalyser()
+            this._analyser.fftSize = 32768 
+            this._bufferLength = this._analyser.frequencyBinCount
+            this._dataArray = new Uint8Array(this._bufferLength)
+
+            this._analyser.connect(this._ctx.destination)
+//            this._analyser.connect(this._ctx.destination)            
+
             this._gain = this._ctx.createGain()
-            this._gain.connect(this._ctx.destination)
-            //        const clip_vol = 1.8 * Math.exp(-0.115 * 12 )
-            this._gain.gain.value = 0.5 * 0.5 * 0.6 * (this._volume / 100)
+//            this._gain.connect(this._ctx.destination)
+            this._gain.connect(this._analyser)            
+
+            this._gain.gain.value = 0.5 * 0.5 * 0.6 // * (this._volume / 100)
 
             this._lpf = this._ctx.createBiquadFilter()
             this._lpf.type = "lowpass"
 
             this._lpf.frequency.setValueAtTime(this._freq, this._ctx.currentTime)
-            this._lpf.Q.setValueAtTime(12, this._ctx.currentTime)
+            this._lpf.Q.setValueAtTime(20, this._ctx.currentTime)
+            
             this._lpf.connect(this._gain)
 
             this._cwGain = this._ctx.createGain()
             this._cwGain.gain.value = 0
             this._cwGain.connect(this._lpf)
 
+            this._totalGain = this._ctx.createGain()
+            this.volume = this._volume
+            this._totalGain.connect(this._cwGain)
+
             this._oscillator = this._ctx.createOscillator()
             this._oscillator.type = 'sine'
             this._oscillator.frequency.setValueAtTime(this._freq, this._ctx.currentTime)
-            this._oscillator.connect(this._cwGain)
+            this._oscillator.connect(this._totalGain)
 
             this._oscillator.start()
-            this._started = true;
+
         }
     }
 
+
+    draw() {
+
+
+ //       this._analyser.getByteTimeDomainData(this._dataArray)
+        
+        
+    //    drawVisual = requestAnimationFrame(draw);
+        let canvas = document.getElementById("viz")
+        let WIDTH = canvas.width;
+        let HEIGHT = canvas.height;
+        
+        let canvasCtx = canvas.getContext("2d");
+        this._analyser.getByteTimeDomainData(this._dataArray);
+ 
+      
+        canvasCtx.fillStyle = "rgb(200, 200, 200)";
+        canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+      
+        canvasCtx.lineWidth = 2;
+        canvasCtx.strokeStyle = "rgb(0, 0, 0)";
+      
+        const sliceWidth = (WIDTH * 1.0) / this._bufferLength;
+        let x = 0;
+      
+        canvasCtx.beginPath();
+        for (let i = 0; i < this._bufferLength; i++) {
+          const v = this._dataArray[i] / 128.0;
+          const y = (v * HEIGHT) / 2;
+      
+          if (i === 0) {
+            canvasCtx.moveTo(x, y);
+          } else {
+            canvasCtx.lineTo(x, y);
+          }
+      
+          x += sliceWidth;
+        }
+      
+        canvasCtx.lineTo(WIDTH, HEIGHT / 2);
+        canvasCtx.stroke();
+      }
+
+
     tick() {
+        // To output the wave form uncomment next line
+        //        this.draw()
         // called at begin of each tick        
         this._ticking = true
-        // check memory        
-        if (this._memory === DIT) {
+        if (this._keyerMode === 'B') {
+            // Curtis B
+            // We have played dit and start dah. If Dit memory in not set it will be set
+            if (this._lastElement === DIT && this._iambic && !this._ditMemory) {
+                this._dahMemory = true
+                // We have played a dah and start with did. If Dah memory is not set it will be st
+            } else if (this._lastElement === DAH && this._iambic && !this._dahMemory) {
+                this._ditMemory = true
+            }
+        }
+
+        // check dit memory 
+        if (this._ditMemory && this._lastElement === DAH) {
             // delete memory
-            this._memory = NONE
-            this.playDitElement()
-            setTimeout(() => { this.tick() }, 2 * this._ditLen * 1000)
+            this._ditMemory = false
+            this.playElement(DIT)
             return
         }
-        if (this._memory === DAH) {
+        // check dah memory
+        if (this._dahMemory && this._lastElement === DIT) {
             // delete memory
-            this._memory = NONE
-            this.playDahElement()
-            setTimeout(() => { this.tick() }, 4 * this._ditLen * 1000)
+            this._dahMemory = false
+            this.playElement(DAH)
             return
         }
+        // check if iambic action is ongoing
         if (this._iambic) {
-            console.log("iambic" + this._lastElement)
             if (this._lastElement === DIT) {
-                this.playDahElement()
-                setTimeout(() => { this.tick() }, 4 * this._ditLen * 1000)
+                this.playElement(DAH)
                 return
             } else {
-                this.playDitElement()
-                setTimeout(() => { this.tick() }, 2 * this._ditLen * 1000)
+                this.playElement(DIT)
                 return
             }
         }
         // check left key
         if (this._ditKey === DOWN && this._dahKey === UP) {
-            this.playDitElement()
-            setTimeout(() => { this.tick() }, 2 * this._ditLen * 1000)
+            this.playElement(DIT)
             return
         }
         // check right key        
         if (this._ditKey === UP && this._dahKey === DOWN) {
-            this.playDahElement()
-            setTimeout(() => { this.tick() }, 4 * this._ditLen * 1000)
+            this.playElement(DAH)
             return
         }
         // stop if no element was played
         this._ticking = false
+        // identify letter
+        this._lastTime = (new Date()).getTime()
+        if (morse_map[this._currentLetter])
+            this._displayLetter(morse_map[this._currentLetter]);
+        else this._displayLetter('*')
+        this._currentLetter = ""
     }
 
 
     keydown(key) {
+        let now = (new Date()).getTime()
+        let delta = 0
+        if (key === DAH) {
+            delta = now - this._lastDahKey
+            this._lastDahKey = now
+        } else {
+            delta = now - this._lastDitKey
+            this._lastDitKey = now
+        }
+        if (delta < 30) {
+            return 
+        } 
         this.start()
+        // only DAH key
         if (key === DAH && this._dahKey === UP) {
             this._dahKey = DOWN
-            if (this._ticking) this._memory = DAH
+            if (this._ticking) {
+                this._dahMemory = true
+            }
         }
+        // only dit
         else if (key === DIT && this._ditKey === UP) {
             this._ditKey = DOWN
-            if (this._ticking) this._memory = DIT
+            if (this._ticking) {
+                this._ditMemory = true
+            }
         }
+        // both keys
         if (this._ditKey === DOWN && this._dahKey === DOWN) this._iambic = true
 
         if (!this._ticking) this.tick()
     }
 
     keyup(key) {
-        console.log("up")
+        let now = (new Date()).getTime()
+        let delta = 0
+        if (key === DAH) {
+            delta = now - this._lastDahKey
+            this._lastDahKey = now
+        } else {
+            delta = now - this._lastDitKey
+            this._lastDitKey = now
+        }
+/*        if (delta < 30) {
+            console.log(delta)  
+            return 
+        } 
+*/
         this.start()
         this._iambic = false
         if (key === DAH) this._dahKey = UP; else this._ditKey = UP
     }
 }
+
+
+
 
 // MIDI functions
 
@@ -619,44 +842,60 @@ function initDevices(midi) {
   }
 
 
-// focus text box on load
+
 window.onload = function () {
     connectMIDI();
-
     // https://stackoverflow.com/questions/7944460/detect-safari-browser    
     var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-    // store settings in local storage
 
-    const storeSetting = function (e) {
-        localStorage.setItem("setting", JSON.stringify(
-            {
-                vol: document.getElementById("vol").value,
-                wpm: document.getElementById("wpm").value,
-                freq: document.getElementById("freq").value
-            }
-        ));
-    }
+    window.focus()
 
-    document.getElementById("vol").onchange = storeSetting
-    document.getElementById("freq").onchange = storeSetting
-    document.getElementById("wpm").onchange = storeSetting
+    // to stop key repeats that can happen on windows.
+    // We store all keydowns received and set to false once key up.
+    // so if we get keydow twice we will only recognize it one time.
+    var keyAllowed = {}
 
-    //    const out = document.getElementById("out");  
-    var keyAllowed = {}  // to stop key repeats
-
+    // restore settings from local storage
     let setting = JSON.parse(localStorage.getItem("setting"));
     if (setting) {
         document.getElementById("vol").value = setting.vol
         document.getElementById("wpm").value = setting.wpm
         document.getElementById("freq").value = setting.freq
+        document.getElementById("key").value = setting.key
     }
 
     let vol = parseInt(document.getElementById("vol").value)
     let wpm = parseInt(document.getElementById("wpm").value)
     let freq = parseInt(document.getElementById("freq").value)
+    let key = document.getElementById("key").value
 
+    // define function to update the letters detected
+    const out = document.getElementById("out")
+    const callBack = displayCallback = (text) => {
+        out.textContent += text;
+        out.scrollTop = out.scrollHeight;
+    }
 
-    morseKeyer = new MorseKeyer(vol, wpm, freq)
+    morseKeyer = new MorseKeyer(vol, wpm, freq, callBack, key)
+
+    const storeSetting = function (e) {
+        let config = {
+            vol: document.getElementById("vol").value,
+            wpm: document.getElementById("wpm").value,
+            freq: document.getElementById("freq").value,
+            key: document.getElementById("key").value,
+        }
+        morseKeyer.volume = config.vol
+        morseKeyer.wpm = config.wpm
+        morseKeyer.frequency = config.freq
+        morseKeyer.keyMode = config.key
+        localStorage.setItem("setting", JSON.stringify(config))
+    }
+
+    document.getElementById("vol").onchange = storeSetting
+    document.getElementById("freq").onchange = storeSetting
+    document.getElementById("wpm").onchange = storeSetting
+    document.getElementById("key").onchange = storeSetting
 
     document.getElementById("freq_value").textContent = document.getElementById("freq").value
     document.getElementById("freq").addEventListener("input", (event) => {
@@ -674,7 +913,6 @@ window.onload = function () {
         // this prevents multiple keydowns on windows 
         if (!isSafari && keyAllowed[e.code] === false) return;
         keyAllowed[e.code] = false
-        console.log("down " + e.code)
         if (e.code === "ShiftLeft" || e.code === "ControlLeft" || e.code === "Period") {
             if (isSafari && morseKeyer._ditKey === DOWN) morseKeyer.keyup(DIT);
             else morseKeyer.keydown(DIT)
@@ -686,7 +924,6 @@ window.onload = function () {
     }
     window.onkeyup = function (e) {
         keyAllowed[e.code] = true;
-        console.log("up " + e.code)
         if (e.code == "ShiftLeft" || e.code === "ControlLeft" || e.code === "Period") {
             morseKeyer.keyup(DIT)
         }
