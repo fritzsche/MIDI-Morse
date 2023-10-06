@@ -3,6 +3,8 @@
  * http://cq-cq.eu/DJ5IL_rt007.pdf
  */
 
+let draw_count = 0
+let last_time = performance.now()
 
 const code_map = [
     [/<ka>/, '-.-.-'], // Message begins / Start of work 
@@ -467,6 +469,9 @@ const morse_map = {
 
 class MorseKeyer {
     constructor(volume = 100, wpm = 25, freq = 600, callback, keyMode) {
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        if ( isFirefox ) this._outputDelay = 0.01; else this._outputDelay = 0
+
         this._started = false
         this._wpm = Number(wpm)
         this._freq = Number(freq)
@@ -537,17 +542,22 @@ class MorseKeyer {
     }
 
     playElement(e) {
-        let now = this._ctx.currentTime +1
+        /*
+        let now_time = performance.now() 
+        let delta = now_time-last_time
+        if (delta > 10) console.log("play: "+  delta + this._ditLen )
+        last_time = now_time*/
+
+        let now = this._ctx.currentTime + this._outputDelay
         this._appendElement(e)
         this._lastElement = e
-//        this._cwGain.gain.setValueAtTime(1, now , 0 ) 
-this._cwGain.gain.value = 1;
+        this._cwGain.gain.setValueAtTime(1, now ) 
         if (e === DIT) {
             this._cwGain.gain.setValueAtTime(0, now + this._ditLen)
-            setTimeout(() => { this.tick() }, 2 * this._ditLen * 1000)
+            setTimeout(() => { this.tick() }, 2 * this._ditLen * 1000,0)
         } else {
             this._cwGain.gain.setValueAtTime(0, now + 3 * this._ditLen)
-            setTimeout(() => { this.tick() }, 4 * this._ditLen * 1000)
+            setTimeout(() => { this.tick() }, 4 * this._ditLen * 1000,0)
         }
     }
 
@@ -555,7 +565,7 @@ this._cwGain.gain.value = 1;
         this.start()
         this._volume = vol
         let v = Math.pow(this._volume / 100, 3)  ////Math.exp( this._volume )
-        this._totalGain.gain.exponentialRampToValueAtTime(v, this._ctx.currentTime /+ 0.03 ) 
+        this._totalGain.gain.setValueAtTime(v, this._ctx.currentTime ) 
     }
 
     set wpm(wpm = 50) {
@@ -579,45 +589,43 @@ this._cwGain.gain.value = 1;
     start() {
         if (this._started === false) {
             this._started = true
-            this._ctx = new (window.AudioContext || window.webkitAudioContext)() // web audio context
+            this._ctx = new (window.AudioContext || window.webkitAudioContext)() // web audio context 
 
 
-            this._analyser = this._ctx.createAnalyser()
+/*            this._analyser = this._ctx.createAnalyser()
             this._analyser.fftSize = 32768 
             this._bufferLength = this._analyser.frequencyBinCount
             this._dataArray = new Uint8Array(this._bufferLength)
 
-            this._analyser.connect(this._ctx.destination)
-//            this._analyser.connect(this._ctx.destination)            
-
+            this._analyser.connect(this._ctx.destination)          
+*/
             this._gain = this._ctx.createGain()
 //            this._gain.connect(this._ctx.destination)
-            this._gain.connect(this._analyser)            
+            this._gain.connect(this._ctx.destination)            
 
-     //       this._gain.gain.value = 0.5 * 0.5 * 0.6 // * (this._volume / 100)
+            this._gain.gain.value = 0.5 * 0.5 * 0.6 * 0.6// * (this._volume / 100)
 
             this._lpf = this._ctx.createBiquadFilter()
             this._lpf.type = 'lowpass' //"lowpass"
 
-            this._lpf.frequency.value = this._freq
-//            this._lpf.frequency.setValueAtTime(this._freq, this._ctx.currentTime)            
-//this._lpf.Q.setValueAtTime(20, this._ctx.currentTime)
-            this._lpf.Q.value = 20
+            this._lpf.frequency.setValueAtTime(this._freq, this._ctx.currentTime)            
+            this._lpf.Q.setValueAtTime(15, this._ctx.currentTime)
+
             this._lpf.connect(this._gain)
 
             this._cwGain = this._ctx.createGain()
             this._cwGain.gain.value = 0
-            this._cwGain.connect(this._gain)
+            this._cwGain.connect(this._lpf)
 
-/*            this._totalGain = this._ctx.createGain()
+            this._totalGain = this._ctx.createGain()
             this.volume = this._volume
             this._totalGain.connect(this._cwGain)
-*/
+
             this._oscillator = this._ctx.createOscillator()
             this._oscillator.type = "sine"
-            this._oscillator.frequency.value = this._freq
-//            this._oscillator.frequency.setValueAtTime(this._freq, this._ctx.currentTime)
-            this._oscillator.connect(this._cwGain)
+//            this._oscillator.frequency.value = this._freq
+            this._oscillator.frequency.setValueAtTime(this._freq, this._ctx.currentTime)
+            this._oscillator.connect(this._totalGain)
 
             this._oscillator.start()
 
@@ -670,7 +678,8 @@ this._cwGain.gain.value = 1;
 
     tick() {
         // To output the wave form uncomment next line
-                this.draw()
+
+  //    if (draw_count++ % 10 === 0 )          this.draw()
         // called at begin of each tick        
         this._ticking = true
         if (this._keyerMode === 'B') {
@@ -730,7 +739,7 @@ this._cwGain.gain.value = 1;
 
 
     keydown(key) {
-        let now = (new Date()).getTime()
+/*        let now = (new Date()).getTime()
         let delta = 0
         if (key === DAH) {
             delta = now - this._lastDahKey
@@ -741,7 +750,7 @@ this._cwGain.gain.value = 1;
         }
         if (delta < 20) {
             return 
-        } 
+        } */
         this.start()
         // only DAH key
         if (key === DAH && this._dahKey === UP) {
@@ -764,7 +773,7 @@ this._cwGain.gain.value = 1;
     }
 
     keyup(key) {
-        let now = (new Date()).getTime()
+/*        let now = (new Date()).getTime()
         let delta = 0
         if (key === DAH) {
             delta = now - this._lastDahKey
@@ -773,6 +782,7 @@ this._cwGain.gain.value = 1;
             delta = now - this._lastDitKey
             this._lastDitKey = now
         }
+        */
 /*        if (delta < 30) {
             console.log(delta)  
             return 
