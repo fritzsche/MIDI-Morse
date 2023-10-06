@@ -788,11 +788,11 @@ class MorseKeyer {
 let morseKeyer;
 
 function connectMIDI() {
-    if (navigator.requestMIDIAccess( )) navigator.requestMIDIAccess({ sysex: false })
+    navigator.requestMIDIAccess( { sysex: false } )
         .then(
             (midi) => midiReady(midi),
             (err) => console.log('Something went wrong', err));
-}
+    }            
 
 function midiReady(midi) {
     midi.addEventListener('statechange', (event) => initDevices(event.target));
