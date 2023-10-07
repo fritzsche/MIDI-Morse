@@ -508,6 +508,10 @@ class MorseKeyer {
         else this._keyerMode = 'B'
     }
 
+    _DEBUG(msg) {
+        console.log(Math.round(performance.now())+" : "+msg)
+    }
+
 
     _ditLength(cpm) {
         // The standard word "PARIS" has 50 units of time. 
@@ -526,6 +530,7 @@ class MorseKeyer {
     }
 
     _displayLetter(l) {
+        this._DEBUG(`Decoded: ${l}`)
         if (this._displayCallback) this._displayCallback(l)
     }
 
@@ -680,7 +685,10 @@ class MorseKeyer {
         // To output the wave form uncomment next line
 
   //    if (draw_count++ % 10 === 0 )          this.draw()
-        // called at begin of each tick        
+        // called at begin of each tick   
+        let now = performance.now()
+        this._DEBUG(`tick ${this._ditLen * 1000} last ${Math.round(now - last_time) }`)
+        last_time = now
         this._ticking = true
         if (this._keyerMode === 'B') {
             // Curtis B
@@ -739,6 +747,7 @@ class MorseKeyer {
 
 
     keydown(key) {
+// this part is for debouncing now on the arduino        
 /*        let now = (new Date()).getTime()
         let delta = 0
         if (key === DAH) {
@@ -754,6 +763,7 @@ class MorseKeyer {
         this.start()
         // only DAH key
         if (key === DAH && this._dahKey === UP) {
+            this._DEBUG("DAH Key Down")
             this._dahKey = DOWN
             if (this._ticking) {
                 this._dahMemory = true
@@ -761,6 +771,7 @@ class MorseKeyer {
         }
         // only dit
         else if (key === DIT && this._ditKey === UP) {
+            this._DEBUG("DIT Key Down")
             this._ditKey = DOWN
             if (this._ticking) {
                 this._ditMemory = true
@@ -773,6 +784,7 @@ class MorseKeyer {
     }
 
     keyup(key) {
+// Debouncing code now on Arduino        
 /*        let now = (new Date()).getTime()
         let delta = 0
         if (key === DAH) {
@@ -791,6 +803,7 @@ class MorseKeyer {
         this.start()
         this._iambic = false
         if (key === DAH) this._dahKey = UP; else this._ditKey = UP
+        this._DEBUG("Key UP")
     }
 }
 
