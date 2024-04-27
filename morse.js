@@ -409,6 +409,9 @@ const NONE = 'X'
 const DOWN = 1
 const UP = 2
 
+const IAMBIC_A = 'A'
+const IAMBIC_B = 'B'
+
 
 const morse_map = {
     // alpha
@@ -526,20 +529,6 @@ class MorseKeyer {
         if (this._displayCallback) this._displayCallback(l)
     }
 
-    _appendElement(e) {
-        // to detect we need to output a space (intra word distance) 
-        // we check to see at least 6 dits since the last character end. 
-        // Detail are 7 dit length but 6 is for more tolerance        
-        let delta = 0
-        let now = (new Date()).getTime()
-        if (this._lastTime > 0 && this._currentLetter === "") delta = Math.abs(now - this._lastTime)
-        // one dit already passed when _appendElement is called another 6 
-        // did for inter character  
-        if (delta > 6 * this._ditLen * 1000) this._displayLetter(' ')
-        // append element to build letters
-        this._currentLetter += e
-    }
-
     set volume(vol = 50) {
         this.start()
         this._volume = vol
@@ -611,6 +600,21 @@ class MorseKeyer {
         this._currentLetter = ""
     }
 
+
+    _appendElement(e) {
+        // to detect we need to output a space (intra word distance) 
+        // we check to see at least 6 dits since the last character end. 
+        // Detail are 7 dit length but 6 is for more tolerance        
+        let delta = 0
+        let now = (new Date()).getTime()
+        if (this._lastTime > 0 && this._currentLetter === "") delta = Math.abs(now - this._lastTime)
+        // one dit already passed when _appendElement is called another 6 
+        // did for inter character  
+        if (delta > 6 * this._ditLen * 1000) this._displayLetter(' ')
+        // append element to build letters
+        this._currentLetter += e
+    }
+
     endElement() {
         // at ending of a element:
         // 1) Check if current ending element key is released and clear memory
@@ -619,16 +623,29 @@ class MorseKeyer {
         if (this._currentElement === DIT) {
             // clear dit Memory if key is not pressed
             if (this._ditKey === UP) this._ditMemory = false
-            // start dah if memory is set
-            if (this._dahMemory) this.startElement(DAH); // opposite element
-            else if (this._ditMemory) this.startElement(DIT); else this._finalizeElement()
+
+            // IAMBIC B: reply on Memory to decide continue
+            // IAMBIC C: check the paddle state and memory.
+            if (this._keyerMode === IAMBIC_B) {
+                // start dah if memory is set
+                if (this._dahMemory) this.startElement(DAH); // opposite element
+                else if (this._ditMemory) this.startElement(DIT); else this._finalizeElement()
+            } else if (this._keyerMode === IAMBIC_A) {
+                if (this._dahMemory || this._dahKey === DOWN) this.startElement(DAH); // opposite element
+                else if (this._ditKeyKey === DOWN) this.startElement(DIT); else this._finalizeElement()
+            }
                  
         } else { // ending dah element
             // clear dad Memory if key is not pressed
-            if (this._dahKey === UP) this._dahMemory = false
+            if (this._dahKey === UP) this._dahMemory = false            
             // start dit element if memory is set
-            if (this._ditMemory) this.startElement(DIT); // opposit element
-            else if (this._dahMemory) this.startElement(DAH); else this._finalizeElement()
+            if (this._keyerMode === IAMBIC_B) {
+              if (this._ditMemory) this.startElement(DIT); // opposit element
+              else if (this._dahMemory) this.startElement(DAH); else this._finalizeElement()
+            } else if (this._keyerMode === IAMBIC_A) {
+                if (this._ditMemory || this._ditKey === DOWN) this.startElement(DIT); // opposite element
+                else if (this._dahKey === DOWN) this.startElement(DIT); else this._finalizeElement()
+            }  
         }
     }
 
@@ -652,10 +669,14 @@ class MorseKeyer {
 
     keydown(key) {
         if (key === DAH) {
-            this._dahMemory = true
+            // for IAMBIC_A we only set memory during opposide element executed
+            // for IAMBIC_B we set memory always
+            if ((this._keyerMode === IAMBIC_A && this._currentElement === DIT ) || this._keyerMode === IAMBIC_B)
+               this._dahMemory = true            
             this._dahKey = DOWN
-        } else {
-            this._ditMemory = true;
+        } else {        
+            if ((this._keyerMode === IAMBIC_A && this._currentElement === DAH ) || this._keyerMode === IAMBIC_B)
+               this._ditMemory = true;
             this._ditKey = DOWN
         }
         if (this._currentElement === NONE) this.startElement(key)
