@@ -104,6 +104,8 @@ input, textarea, select {
   color: white;
 /*  white-space: pre;*/
 }
-
+#viz {
+  display: none;
+}
 
 .setclear { clear: both; margin-bottom: 1em;}

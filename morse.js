@@ -78,7 +78,7 @@ class Morse {
         this._lpf = this._ctx.createBiquadFilter()
         this._lpf.type = "lowpass"
         this._lpf.frequency.setValueAtTime(freq, this._ctx.currentTime)
-        this._lpf.Q.setValueAtTime(12, this._ctx.currentTime)
+        this._lpf.Q.setValueAtTime(20, this._ctx.currentTime)
         this._lpf.connect(this._gain)
 
         this._cwGain = this._ctx.createGain()
@@ -470,7 +470,7 @@ const morse_map = {
 class MorseKeyer {
     constructor(volume = 100, wpm = 25, freq = 600, callback, keyMode) {
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-        if ( isFirefox ) this._outputDelay = 0.01; else this._outputDelay = 0
+        if (isFirefox) this._outputDelay = 0.01; else this._outputDelay = 0
 
         this._started = false
         this._wpm = Number(wpm)
@@ -481,17 +481,10 @@ class MorseKeyer {
         // set if dit/dah-key's pressed
         this._ditKey = UP
         this._dahKey = UP
-
         // memory a pressed dit key while dah key is pressed
         this._ditMemory = false
         // memory a pressed dah key while dit key is pressed
         this.dahMemory = false
-
-        // set true while both paddels are pressed
-        this._iambic = false
-
-        // active while keys are pressed and memory is processed (main loop)
-        this._ticking = false
 
         // the last element executed (e.g. to issue alternating elements on iambic action)
         this._lastElement = NONE
@@ -500,8 +493,7 @@ class MorseKeyer {
         this._displayCallback = displayCallback
         this._lastTime = 0
 
-        this._lastDitKey = 0
-        this._lastDahKey = 0
+        this._currentElement = NONE
 
         if (key === "CURTIS_A")
             this, _keyerMode = 'A';
@@ -509,7 +501,7 @@ class MorseKeyer {
     }
 
     _DEBUG(msg) {
-        console.log(Math.round(performance.now())+" : "+msg)
+        console.log(Math.round(performance.now()) + " : " + msg)
     }
 
 
@@ -541,36 +533,18 @@ class MorseKeyer {
         let delta = 0
         let now = (new Date()).getTime()
         if (this._lastTime > 0 && this._currentLetter === "") delta = Math.abs(now - this._lastTime)
+        // one dit already passed when _appendElement is called another 6 
+        // did for inter character  
         if (delta > 6 * this._ditLen * 1000) this._displayLetter(' ')
         // append element to build letters
         this._currentLetter += e
-    }
-
-    playElement(e) {
-        /*
-        let now_time = performance.now() 
-        let delta = now_time-last_time
-        if (delta > 10) console.log("play: "+  delta + this._ditLen )
-        last_time = now_time*/
-
-        let now = this._ctx.currentTime + this._outputDelay
-        this._appendElement(e)
-        this._lastElement = e
-        this._cwGain.gain.setValueAtTime(1, now ) 
-        if (e === DIT) {
-            this._cwGain.gain.setValueAtTime(0, now + this._ditLen)
-            setTimeout(() => { this.tick() }, 2 * this._ditLen * 1000,0)
-        } else {
-            this._cwGain.gain.setValueAtTime(0, now + 3 * this._ditLen)
-            setTimeout(() => { this.tick() }, 4 * this._ditLen * 1000,0)
-        }
     }
 
     set volume(vol = 50) {
         this.start()
         this._volume = vol
         let v = Math.pow(this._volume / 100, 3)  ////Math.exp( this._volume )
-        this._totalGain.gain.setValueAtTime(v, this._ctx.currentTime ) 
+        this._totalGain.gain.setValueAtTime(v, this._ctx.currentTime)
     }
 
     set wpm(wpm = 50) {
@@ -594,26 +568,17 @@ class MorseKeyer {
     start() {
         if (this._started === false) {
             this._started = true
-            this._ctx = new (window.AudioContext || window.webkitAudioContext)() // web audio context 
+            this._ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 0 }) // web audio context 
 
-
-/*            this._analyser = this._ctx.createAnalyser()
-            this._analyser.fftSize = 32768 
-            this._bufferLength = this._analyser.frequencyBinCount
-            this._dataArray = new Uint8Array(this._bufferLength)
-
-            this._analyser.connect(this._ctx.destination)          
-*/
             this._gain = this._ctx.createGain()
-//            this._gain.connect(this._ctx.destination)
-            this._gain.connect(this._ctx.destination)            
+            this._gain.connect(this._ctx.destination)
 
-            this._gain.gain.value = 0.5 * 0.5 * 0.6 * 0.6// * (this._volume / 100)
+            this._gain.gain.value = 1 
 
             this._lpf = this._ctx.createBiquadFilter()
-            this._lpf.type = 'lowpass' //"lowpass"
+            this._lpf.type = 'lowpass' 
 
-            this._lpf.frequency.setValueAtTime(this._freq, this._ctx.currentTime)            
+            this._lpf.frequency.setValueAtTime(this._freq, this._ctx.currentTime)
             this._lpf.Q.setValueAtTime(15, this._ctx.currentTime)
 
             this._lpf.connect(this._gain)
@@ -628,116 +593,17 @@ class MorseKeyer {
 
             this._oscillator = this._ctx.createOscillator()
             this._oscillator.type = "sine"
-//            this._oscillator.frequency.value = this._freq
+
             this._oscillator.frequency.setValueAtTime(this._freq, this._ctx.currentTime)
             this._oscillator.connect(this._totalGain)
-
             this._oscillator.start()
 
         }
     }
 
+    _finalizeElement() {
+        this._currentElement = NONE // stop producing element
 
-    draw() {
-
-
- //       this._analyser.getByteTimeDomainData(this._dataArray)
-        
-        
-    //    drawVisual = requestAnimationFrame(draw);
-        let canvas = document.getElementById("viz")
-        let WIDTH = canvas.width;
-        let HEIGHT = canvas.height;
-        
-        let canvasCtx = canvas.getContext("2d");
-        this._analyser.getByteTimeDomainData(this._dataArray);
- 
-      
-        canvasCtx.fillStyle = "rgb(200, 200, 200)";
-        canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
-      
-        canvasCtx.lineWidth = 2;
-        canvasCtx.strokeStyle = "rgb(0, 0, 0)";
-      
-        const sliceWidth = (WIDTH * 1.0) / this._bufferLength;
-        let x = 0;
-      
-        canvasCtx.beginPath();
-        for (let i = 0; i < this._bufferLength; i++) {
-          const v = this._dataArray[i] / 128.0;
-          const y = (v * HEIGHT) / 2;
-      
-          if (i === 0) {
-            canvasCtx.moveTo(x, y);
-          } else {
-            canvasCtx.lineTo(x, y);
-          }
-      
-          x += sliceWidth;
-        }
-      
-        canvasCtx.lineTo(WIDTH, HEIGHT / 2);
-        canvasCtx.stroke();
-      }
-
-
-    tick() {
-        // To output the wave form uncomment next line
-
-  //    if (draw_count++ % 10 === 0 )          this.draw()
-        // called at begin of each tick   
-        let now = performance.now()
-        this._DEBUG(`tick ${this._ditLen * 1000} last ${Math.round(now - last_time) }`)
-        last_time = now
-        this._ticking = true
-        if (this._keyerMode === 'B') {
-            // Curtis B
-            // We have played dit and start dah. If Dit memory in not set it will be set
-            if (this._lastElement === DIT && this._iambic && !this._ditMemory) {
-                this._dahMemory = true
-                // We have played a dah and start with did. If Dah memory is not set it will be st
-            } else if (this._lastElement === DAH && this._iambic && !this._dahMemory) {
-                this._ditMemory = true
-            }
-        }
-
-        // check dit memory 
-        if (this._ditMemory && this._lastElement === DAH) {
-            // delete memory
-            this._ditMemory = false
-            this.playElement(DIT)
-            return
-        }
-        // check dah memory
-        if (this._dahMemory && this._lastElement === DIT) {
-            // delete memory
-            this._dahMemory = false
-            this.playElement(DAH)
-            return
-        }
-        // check if iambic action is ongoing
-        if (this._iambic) {
-            if (this._lastElement === DIT) {
-                this.playElement(DAH)
-                return
-            } else {
-                this.playElement(DIT)
-                return
-            }
-        }
-        // check left key
-        if (this._ditKey === DOWN && this._dahKey === UP) {
-            this.playElement(DIT)
-            return
-        }
-        // check right key        
-        if (this._ditKey === UP && this._dahKey === DOWN) {
-            this.playElement(DAH)
-            return
-        }
-        // stop if no element was played
-        this._ticking = false
-        // identify letter
         this._lastTime = (new Date()).getTime()
         if (morse_map[this._currentLetter])
             this._displayLetter(morse_map[this._currentLetter]);
@@ -745,81 +611,71 @@ class MorseKeyer {
         this._currentLetter = ""
     }
 
+    endElement() {
+        // at ending of a element:
+        // 1) Check if current ending element key is released and clear memory
+        // 2) play the opposite element if memory set OR check if current element is set
+
+        if (this._currentElement === DIT) {
+            // clear dit Memory if key is not pressed
+            if (this._ditKey === UP) this._ditMemory = false
+            // start dah if memory is set
+            if (this._dahMemory) this.startElement(DAH); // opposite element
+            else if (this._ditMemory) this.startElement(DIT); else this._finalizeElement()
+                 
+        } else { // ending dah element
+            // clear dad Memory if key is not pressed
+            if (this._dahKey === UP) this._dahMemory = false
+            // start dit element if memory is set
+            if (this._ditMemory) this.startElement(DIT); // opposit element
+            else if (this._dahMemory) this.startElement(DAH); else this._finalizeElement()
+        }
+    }
+
+    startElement(element) {
+        this._currentElement = element
+        this.start()
+        // play audio
+        let now = this._ctx.currentTime + this._outputDelay
+        this._appendElement(element)
+        //      this._lastElement = element
+        this._cwGain.gain.setValueAtTime(1, now)
+        // Schedule the ending of the element
+        if (element === DIT) {
+            this._cwGain.gain.setValueAtTime(0, now + this._ditLen)
+            setTimeout(() => { this.endElement() }, 2 * this._ditLen * 1000, 0)
+        } else {
+            this._cwGain.gain.setValueAtTime(0, now + 3 * this._ditLen)
+            setTimeout(() => { this.endElement() }, 4 * this._ditLen * 1000, 0)
+        }
+    }
 
     keydown(key) {
-// this part is for debouncing now on the arduino        
-/*        let now = (new Date()).getTime()
-        let delta = 0
         if (key === DAH) {
-            delta = now - this._lastDahKey
-            this._lastDahKey = now
-        } else {
-            delta = now - this._lastDitKey
-            this._lastDitKey = now
-        }
-        if (delta < 20) {
-            return 
-        } */
-        this.start()
-        // only DAH key
-        if (key === DAH && this._dahKey === UP) {
-            this._DEBUG("DAH Key Down")
+            this._dahMemory = true
             this._dahKey = DOWN
-            if (this._ticking) {
-                this._dahMemory = true
-            }
-        }
-        // only dit
-        else if (key === DIT && this._ditKey === UP) {
-            this._DEBUG("DIT Key Down")
-            this._ditKey = DOWN
-            if (this._ticking) {
-                this._ditMemory = true
-            }
-        }
-        // both keys
-        if (this._ditKey === DOWN && this._dahKey === DOWN) this._iambic = true
-
-        if (!this._ticking) this.tick()
-    }
-
-    keyup(key) {
-// Debouncing code now on Arduino        
-/*        let now = (new Date()).getTime()
-        let delta = 0
-        if (key === DAH) {
-            delta = now - this._lastDahKey
-            this._lastDahKey = now
         } else {
-            delta = now - this._lastDitKey
-            this._lastDitKey = now
+            this._ditMemory = true;
+            this._ditKey = DOWN
         }
-        */
-/*        if (delta < 30) {
-            console.log(delta)  
-            return 
-        } 
-*/
-        this.start()
-        this._iambic = false
+        if (this._currentElement === NONE) this.startElement(key)
+    }
+    keyup(key) {
         if (key === DAH) this._dahKey = UP; else this._ditKey = UP
-        this._DEBUG("Key UP")
     }
 }
-
-
 
 
 // MIDI functions
 
 let morseKeyer;
 
-connectMIDI = () =>  {
-    navigator.requestMIDIAccess( { sysex: false } )
+connectMIDI = () => {
+    navigator.requestMIDIAccess({ sysex: false })
         .then(
             (midi) => midiReady(midi),
             (err) => console.log('Something went wrong', err));
-    }            
+}
 
 function midiReady(midi) {
     midi.addEventListener('statechange', (event) => initDevices(event.target));
@@ -829,45 +685,43 @@ function midiReady(midi) {
 function initDevices(midi) {
     midiIn = [];
     midiOut = [];
-    
+
     // Inputs
     const inputs = midi.inputs.values();
     for (let input = inputs.next(); input && !input.done; input = inputs.next()) {
-      midiIn.push(input.value);
+        midiIn.push(input.value);
     }
-    
+
     // Outputs
     const outputs = midi.outputs.values();
     for (let output = outputs.next(); output && !output.done; output = outputs.next()) {
-      midiOut.push(output.value);
+        midiOut.push(output.value);
     }
     startListening();
-  }
+}
 
-  function startListening() {
+function startListening() {
     for (const input of midiIn) {
-      input.addEventListener('midimessage', midiMessageReceived);
+        input.addEventListener('midimessage', midiMessageReceived);
     }
-  }
+}
 
-  function midiMessageReceived(event) {
+function midiMessageReceived(event) {
     const NOTE_ON = 9;
     const NOTE_OFF = 8;
-    
+
     const PITCH_DIT = 48;
     const PITCH_DAH = 50;
-  
+
     const cmd = event.data[0] >> 4;
     const pitch = event.data[1];
-//    console.log(`CMD ${cmd} pitch ${pitch }`);
+    //    console.log(`CMD ${cmd} pitch ${pitch }`);
     if (cmd === NOTE_ON) {
         if (pitch == PITCH_DIT) morseKeyer.keydown(DIT); else morseKeyer.keydown(DAH)
     } else {
         if (pitch == PITCH_DIT) morseKeyer.keyup(DIT); else morseKeyer.keyup(DAH)
-    }    
-  }
-
-
+    }
+}
 
 window.onload = function () {
     connectMIDI();
