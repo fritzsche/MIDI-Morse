@@ -8,7 +8,7 @@ class Button{
     long lastChange;
     int lastValue;
   public:
-    static const int  DEBOUNCE_MS = 20;
+    static const int  DEBOUNCE_MS = 0;
     void start(const int pinNumber);
     int state();
 };

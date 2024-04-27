@@ -39,6 +39,7 @@ void sendMidi(int state, int note) {
   Serial.print(state);
   Serial.print("/");
   Serial.println(note);
+  if (state == 0) Serial.println();
 #endif
 }
 
