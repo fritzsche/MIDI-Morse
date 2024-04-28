@@ -458,16 +458,18 @@ const morse_map = {
     '.-.-.-': '.',
     '-...-': '=',
     '-..-.': '/',
+    '-.-.--': '!',    
     // Deutsche Umlaute
     '.--.-': 'ä',
     '---.': 'ö',
     '..--': 'ü',
     '...--..': 'ß',
-    '-.-.--': '!',
+
     '-.-.-': '<ka>', // Message begins / Start of work 
     '...-.-': '<sk>', //  End of contact / End of work
     '.-.-.': '<ar>', // End of transmission / End of message
-    '-.--.': '<kn>' // Go ahead, specific named station.    
+    '-.--.': '<kn>', // Go ahead, specific named station.    
+    '........': '<error>' // Go ahead, specific named station. 
 }
 
 
