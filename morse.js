@@ -457,6 +457,7 @@ const morse_map = {
     '..--..': '?',
     '.-.-.-': '.',
     '-...-': '=',
+    '-..-.': '/',
     // Deutsche Umlaute
     '.--.-': 'ä',
     '---.': 'ö',
@@ -736,7 +737,7 @@ function midiMessageReceived(event) {
 
     const cmd = event.data[0] >> 4;
     const pitch = event.data[1];
-    //    console.log(`CMD ${cmd} pitch ${pitch }`);
+
     if (cmd === NOTE_ON) {
         if (pitch == PITCH_DIT) morseKeyer.keydown(DIT); else morseKeyer.keydown(DAH)
     } else {
