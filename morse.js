@@ -507,7 +507,7 @@ class MorseKeyer {
     }
 
     _DEBUG(msg) {
-        console.log(Math.round(performance.now()) + " : " + msg)
+      //  console.log(Math.round(performance.now()) + " : " + msg)
     }
 
 
