@@ -557,7 +557,7 @@ class MorseKeyer {
         } else this._keyerMode = 'A'
     }
 
-    start() {
+    async start() {
         if (this._started === false) {
             this._started = true
             this._ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 0 }) // web audio context 
@@ -575,9 +575,14 @@ class MorseKeyer {
 
             this._lpf.connect(this._gain)
 
-            this._cwGain = this._ctx.createGain()
-            this._cwGain.gain.value = 0
-            this._cwGain.connect(this._lpf)
+            await this._ctx.audioWorklet.addModule("morse-processor.js")
+            this._cwGain = new AudioWorkletNode(
+                this._ctx,
+                "morse-processor",
+              );           
+              this._cwGain.connect(this._lpf)
+
+
 
             this._totalGain = this._ctx.createGain()
             this.volume = this._volume
@@ -652,20 +657,26 @@ class MorseKeyer {
         }
     }
 
-    startElement(element) {
+    async startElement(element) {
         this._currentElement = element
-        this.start()
+        await this.start()
         // play audio
         let now = this._ctx.currentTime + this._outputDelay
         this._appendElement(element)
         //      this._lastElement = element
-        this._cwGain.gain.setValueAtTime(1, now)
+        //this._cwGain.gain.setValueAtTime(1, now)
+
+        this._cwGain.parameters.get("gain").setValueAtTime(1, now)
+
         // Schedule the ending of the element
         if (element === DIT) {
-            this._cwGain.gain.setValueAtTime(0, now + this._ditLen)
+            this._cwGain.parameters.get("gain").setValueAtTime(0, now + this._ditLen)
+//            this._cwGain.gain.setValueAtTime(0, now + this._ditLen)
+
             setTimeout(() => { this.endElement() }, 2 * this._ditLen * 1000, 0)
         } else {
-            this._cwGain.gain.setValueAtTime(0, now + 3 * this._ditLen)
+//            this._cwGain.gain.setValueAtTime(0, now + 3 * this._ditLen)
+            this._cwGain.parameters.get("gain").setValueAtTime(0, now + 3 * this._ditLen)
             setTimeout(() => { this.endElement() }, 4 * this._ditLen * 1000, 0)
         }
     }
