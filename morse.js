@@ -576,12 +576,16 @@ class MorseKeyer {
             this._lpf.connect(this._gain)
 
             await this._ctx.audioWorklet.addModule("morse-processor.js")
+
+            // temp. implementation of a shared memory buffer  
+//            const gSAB = new SharedArrayBuffer(1024);
+//            myWorker.postMessage(buffer);
+            
             this._cwGain = new AudioWorkletNode(
                 this._ctx,
                 "morse-processor",
               );           
               this._cwGain.connect(this._lpf)
-
 
 
             this._totalGain = this._ctx.createGain()
@@ -743,10 +747,10 @@ function startListening() {
 
 function midiMessageReceived(event) {
     const NOTE_ON = 9;
-    const NOTE_OFF = 8;
+//    const NOTE_OFF = 8;
 
     const PITCH_DIT = 48;
-    const PITCH_DAH = 50;
+//    const PITCH_DAH = 50;
 
     const cmd = event.data[0] >> 4;
     const pitch = event.data[1];
