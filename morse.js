@@ -560,7 +560,14 @@ class MorseKeyer {
     async start() {
         if (this._started === false) {
             this._started = true
-            this._ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 0 }) // web audio context 
+
+//            this._ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 0 }) // web audio context 
+            //            this._ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 0 }) // web audio context 
+            this._ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 0 ,
+                sampleRate: 96000}) // web audio context 
+
+            console.log(this._ctx.sampleRate)
+            console.log(this._ctx.baseLatency)
 
             this._gain = this._ctx.createGain()
             this._gain.connect(this._ctx.destination)
@@ -580,14 +587,19 @@ class MorseKeyer {
             // temp. implementation of a shared memory buffer  
 //            const gSAB = new SharedArrayBuffer(1024);
 //            myWorker.postMessage(buffer);
-            
+
             this._cwGain = new AudioWorkletNode(
                 this._ctx,
                 "morse-processor",
               );           
               this._cwGain.connect(this._lpf)
 
-
+//*********** */
+const sharedArray  = new SharedArrayBuffer(4 * Int32Array.BYTES_PER_ELEMENT)
+this._cwGain.port.postMessage(sharedArray)
+this._sharedArray  = new Int32Array(sharedArray);
+console.log("send array")
+//************ */
             this._totalGain = this._ctx.createGain()
             this.volume = this._volume
             this._totalGain.connect(this._cwGain)
@@ -661,9 +673,9 @@ class MorseKeyer {
         }
     }
 
-    async startElement(element) {
+    startElement(element) {
         this._currentElement = element
-        await this.start()
+
         // play audio
         let now = this._ctx.currentTime + this._outputDelay
         this._appendElement(element)
@@ -685,7 +697,8 @@ class MorseKeyer {
         }
     }
 
-    keydown(key) {
+    async keydown(key) {
+        await this.start()        
         if (key === DAH) {
             // for IAMBIC_A we only set memory during opposide element executed
             // for IAMBIC_B we set memory always
@@ -695,6 +708,8 @@ class MorseKeyer {
         } else {        
             if ((this._keyerMode === IAMBIC_A && this._currentElement === DAH ) || this._keyerMode === IAMBIC_B)
                this._ditMemory = true;
+            // new sharedArray
+            Atomics.store( this._sharedArray,DIT,1)
             this._ditKey = DOWN
         }
         if (this._currentElement === NONE) this.startElement(key)
